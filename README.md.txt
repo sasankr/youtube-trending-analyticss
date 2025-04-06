@@ -27,4 +27,4 @@ This project analyzes trending YouTube videos using AWS and Tableau. It demonstr
 ![Dashboard Preview](dashboard_screenshot.png)
 
 ## 📌 Author
-Created by [Your Name](https://www.linkedin.com/in/your-profile) – aspiring data engineer.
+Created by [sasank reddy](https://www.linkedin.com/in/sasank reddy) – aspiring data engineer.
