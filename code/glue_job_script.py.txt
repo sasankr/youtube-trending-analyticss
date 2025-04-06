@@ -1,0 +1,80 @@
+import boto3
+import json
+import pandas as pd
+from io import BytesIO
+
+# AWS S3 Setup
+s3_client = boto3.client('s3')
+bucket_name = "youtube-trending-datap"
+raw_folder = "raw/"
+processed_folder = "processed/"
+
+def fetch_s3_objects(bucket, prefix):
+    """Fetch all JSON files from the specified S3 prefix."""
+    response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+    return [obj['Key'] for obj in response.get('Contents', [])]
+
+def safe_int(value):
+    """Convert value to int safely, replacing None or invalid values with 0."""
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
+def process_json_files(file_keys):
+    """Read and process JSON files from S3, ensuring consistent data types."""
+    all_data = []
+
+    for key in file_keys:
+        try:
+            response = s3_client.get_object(Bucket=bucket_name, Key=key)
+            content = response['Body'].read().decode('utf-8')
+
+            if not content.strip():  # 🛑 Skip empty files
+                print(f"Skipping empty file: {key}")
+                continue
+
+            json_data = json.loads(content)  # ✅ Safe JSON parsing
+
+            for item in json_data.get("items", []):
+                record = {
+                    "title": item["snippet"]["title"],
+                    "published_date": item["snippet"]["publishedAt"],
+                    "views": safe_int(item["statistics"].get("viewCount", 0)),
+                    "likes": safe_int(item["statistics"].get("likeCount", 0)),
+                    "comments": safe_int(item["statistics"].get("commentCount", 0)),
+                    "country": key.split("_")[1]  # Extract country from filename
+                }
+                all_data.append(record)
+
+        except json.JSONDecodeError:
+            print(f"Skipping corrupt JSON file: {key}")
+        except Exception as e:
+            print(f"Error processing {key}: {str(e)}")
+
+    if all_data:
+        df = pd.DataFrame(all_data)
+        
+        # Ensure all numerical columns are explicitly integers
+        df["views"] = df["views"].astype(int)
+        df["likes"] = df["likes"].astype(int)
+        df["comments"] = df["comments"].astype(int)
+
+        # Save as Parquet
+        parquet_buffer = BytesIO()
+        df.to_parquet(parquet_buffer, engine="pyarrow")
+        
+        # Upload processed data to S3
+        processed_file_key = f"{processed_folder}trending_data.parquet"
+        s3_client.put_object(Bucket=bucket_name, Key=processed_file_key, Body=parquet_buffer.getvalue())
+
+        print(f"Processed file saved: {processed_file_key}")
+    else:
+        print("No valid data to process.")
+
+# Main Execution
+file_keys = fetch_s3_objects(bucket_name, raw_folder)
+if file_keys:
+    process_json_files(file_keys)
+else:
+    print("No new files found in S3.")

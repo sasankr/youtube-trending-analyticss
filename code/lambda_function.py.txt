@@ -1,0 +1,53 @@
+import boto3
+import requests
+import json
+from datetime import datetime
+
+
+
+
+S3_BUCKET_NAME = "youtube-trending-datap"  
+S3_RAW_FOLDER = "raw/"
+
+# 🔹 YouTube API Configuration
+API_KEY = "AIzaSyAKmSTyO2bd0eLsec-ve1_stR-cjJ4NqAA"
+COUNTRY_CODES = ["US", "GB", "IN", "CA"]
+API_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+# 🔹 Initialize AWS S3 Client with Hardcoded Credentials (Lambda uses IAM by default)
+s3 = boto3.client(
+    "s3",
+    import os
+
+
+)
+
+def fetch_youtube_trending(country_code):
+    """Fetch trending YouTube videos for a given country."""
+    params = {
+        "part": "snippet,statistics",
+        "chart": "mostPopular",
+        "regionCode": country_code,
+        "maxResults": 50,
+        "key": API_KEY
+    }
+    
+    response = requests.get(API_URL, params=params)
+    data = response.json()
+    
+    # 🔹 Save data to S3
+    filename = f"{S3_RAW_FOLDER}trending_{country_code}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+    s3.put_object(Bucket=S3_BUCKET_NAME, Key=filename, Body=json.dumps(data))
+    
+    print(f"Uploaded: {filename}")
+
+# 🔹 Lambda Handler
+def lambda_handler(event, context):
+    """Lambda handler function to trigger fetching YouTube trending data."""
+    for country in COUNTRY_CODES:
+        fetch_youtube_trending(country)
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('YouTube trending data fetched and uploaded to S3 successfully.')
+    }
